@@ -1,0 +1,150 @@
+dnl
+dnl
+dnl configure.in.head:
+dnl
+dnl $Id:$
+dnl
+dnl $Log:$
+dnl
+dnl
+dnl
+AC_PREREQ(2.13)
+AC_INIT(src/numautil.c)
+
+AC_PROG_CC
+AC_PROG_CPP
+AC_PROG_INSTALL
+AC_PROG_LN_S
+AC_PROG_MAKE_SET
+AC_PROG_RANLIB
+AC_PROG_AWK
+AC_CHECK_PROG(MD5SUM,md5sum,md5sum)
+AC_CHECK_PROG(GREP,grep,grep)
+
+AC_SYS_LARGEFILE
+
+NUMAUTIL_MAJOR_VERSION=`cat $srcdir/version-major`
+NUMAUTIL_MINOR_VERSION=`cat $srcdir/version-minor`
+NUMAUTIL_MICRO_VERSION=`cat $srcdir/version-micro`
+
+
+NUMAUTIL_VERSION=$NUMAUTIL_MAJOR_VERSION.$NUMAUTIL_MINOR_VERSION.$NUMAUTIL_MICRO_VERSION
+
+AC_SUBST(NUMAUTIL_MAJOR_VERSION)
+AC_SUBST(NUMAUTIL_MINOR_VERSION)
+AC_SUBST(NUMAUTIL_MICRO_VERSION)
+AC_SUBST(NUMAUTIL_VERSION)
+
+
+VERSION=$NUMAUTIL_VERSION
+PACKAGE=numautil
+
+AM_INIT_AUTOMAKE($PACKAGE,$VERSION)
+
+
+AM_CONFIG_HEADER(src/config.h)
+
+# Checks for header files.
+AC_CHECK_HEADERS([malloc.h])
+AC_HEADER_STDC
+AC_FUNC_MALLOC
+
+AC_C_INLINE
+AC_C_CONST
+
+AC_ARG_WITH(idldir,AC_HELP_STRING([--with-idldir=PATH],[Path to dbus idl desription files]),
+                IDLDIR=$with_idldir,IDLDIR=/usr/share/idl)
+
+AC_SUBST(IDLDIR)
+
+AC_CHECK_PROG(XC_RPCGEN,xc-rpcgen,xc-rpcgen)
+
+dnl --xenstore--
+
+LIBXENSTORE_PREFIX=no
+AC_ARG_WITH([libxenstore],
+            AC_HELP_STRING([--with-libxenstore=PATH], [Path to prefix where libxenstore was installed.]),
+            [LIBXENSTORE_PREFIX=$with_libxenstore], [])
+
+case "x$LIBXENSTORE_PREFIX" in
+        x|xno|xyes)
+                LIBXENSTORE_INC=""
+                LIBXENSTORE_LIB="-lxenstore"
+                ;;
+        *)
+                LIBXENSTORE_INC="-I${LIBXENSTORE_PREFIX}/include"
+                LIBXENSTORE_LIB="-L${LIBXENSTORE_PREFIX}/lib -lxenstore"
+                ;;
+esac
+
+AC_SUBST(LIBXENSTORE_INC)
+AC_SUBST(LIBXENSTORE_LIB)
+
+have_libxenstore=true
+
+ORIG_LDFLAGS="${LDFLAGS}"
+ORIG_CPPFLAGS="${CPPFLAGS}"
+	LDFLAGS="${LDFLAGS} ${LIBXENSTORE_LIB}"
+	CPPFLAGS="${CPPFLAGS} ${LIBXENSTORE_INC}"
+	AC_CHECK_HEADERS([xs.h], [], [have_libxenstore=false])
+	AC_CHECK_FUNC(xs_domain_open, [], [have_libxenstore=false])
+LDFLAGS="${ORIG_LDFLAGS}"
+CPPFLAGS="${ORIG_CPPFLAGS}"
+
+if test "x$have_libxenstore" = "xfalse"; then
+	AC_MSG_ERROR([xenstore - where is libxenstore mang?])
+fi
+
+dnl --xclib--
+
+LIBXC_PREFIX=no
+AC_ARG_WITH(libxc,
+	AC_HELP_STRING([--with-libxc=PATH],[Path to prefix where where libxc and xen were installed]),
+		LIBXC_PREFIX=$with_libxc,[])
+
+
+case "x$LIBXC_PREFIX" in
+	xno)
+		LIBXC_INC=""
+		LIBXC_LIB=-lxenctrl
+		;;
+	xyes) 
+		LIBXC_INC=""
+		LIBXC_LIB=-lxenctrl
+		;;
+	*)
+		LIBXC_INC="-I${LIBXC_PREFIX}/include"
+		LIBXC_LIB="-L${LIBXC_PREFIX}/lib -lxenctrl"
+		;;
+esac
+
+AC_SUBST(LIBXC_INC)
+AC_SUBST(LIBXC_LIB)
+
+ORIG_LDFLAGS="${LDFLAGS}"
+ORIG_CFLAGS="${CFLAGS}"
+
+	have_libxenctrl=true
+
+	LDFLAGS="${LDFLAGS} ${LIBXC_LIB}" 
+	CFLAGS="${CFLAGS} ${LIBXC_INC}" 
+
+	AC_CHECK_HEADERS([xenctrl.h],[],[have_libxenctrl=false])
+	AC_CHECK_FUNC(xc_version,[],[have_libxenctrl=false])
+	AC_CHECK_FUNC(xc_domain_iommu_x_mapping,[],[have_libxenctrl=false])
+
+LDFLAGS="${ORIG_LDFLAGS}"
+CFLAGS="${ORIG_CFLAGS}"
+
+if [ "x$have_libxenctrl" != "xtrue" ]; then
+	AC_MSG_WARN(xclib - disabling xen bits by default as libxenctrl lacks xc_domain_iommu_x_mapping)
+else 
+	AC_MSG_WARN(xclib - found xen bits)
+fi
+
+AM_CONDITIONAL(HAVE_LIBXENCTRL, test "x$have_libxenctrl" = "xtrue")
+
+
+AC_OUTPUT([Makefile
+	   src/Makefile])
+
