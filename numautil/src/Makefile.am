@@ -27,7 +27,7 @@ INCLUDES =  ${LIBXENSTORE_INC} ${LIBXC_INC}
 
 noinst_HEADERS=project.h prototypes.h
 
-bin_PROGRAMS = numutil
+bin_PROGRAMS = numautil
 
 BUILT_SOURCES = version.h 
 
