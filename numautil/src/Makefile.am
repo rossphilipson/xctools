@@ -32,12 +32,12 @@ bin_PROGRAMS = numutil
 BUILT_SOURCES = version.h 
 
 SRCS=numautil.c
-pmutil_SOURCES = ${SRCS}
-pmutil_LDADD = -lpci ${LIBXENSTORE_LIB} ${LIBXC_LIB}
+numautil_SOURCES = ${SRCS}
+numautil_LDADD = -lpci ${LIBXENSTORE_LIB} ${LIBXC_LIB}
 
 AM_CFLAGS=-g
 
-pmutil_LDFLAGS = 
+numautil_LDFLAGS = 
 
 VFD=${srcdir}/..
 VF=${shell cat ${VFD}/version-files}
@@ -56,10 +56,10 @@ version.h: $(VFD)/version-files $(VFD)/version-major \
 	$(VFD)/version-minor $(VFD)/version-micro \
 	$(VFD)/version-md5sums ${VFS} Makefile
 	if [ .${VNUM} = . ]; then \
-		echo "#define VERSION \"pmutil Version ${VDEF} + Edits\"" > version.h; \
+		echo "#define VERSION \"numautil Version ${VDEF} + Edits\"" > version.h; \
 		echo ${VDEF}-E > version-num; \
 	else \
-		echo "#define VERSION \"pmutil Version ${VNUM}\"" > version.h; \
+		echo "#define VERSION \"numautil Version ${VNUM}\"" > version.h; \
 		echo ${VNUM} > version-num; \
 	fi
 
