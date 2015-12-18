@@ -60,6 +60,10 @@ static void cpus_to_nodes(void)
         goto out1;
     }
 
+    memset(coremap, 0xff, sizeof(*coremap) * max_cpus);
+    memset(socketmap, 0xff, sizeof(*socketmap) * max_cpus);
+    memset(nodemap, 0xff, sizeof(*nodemap) * max_cpus);
+
     set_xen_guest_handle(tinfo.cpu_to_core, coremap);
     set_xen_guest_handle(tinfo.cpu_to_socket, socketmap);
     set_xen_guest_handle(tinfo.cpu_to_node, nodemap);
