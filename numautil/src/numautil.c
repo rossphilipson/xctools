@@ -74,7 +74,8 @@ static void cpus_to_nodes(void)
     }
 
     for (i = 0; i < max_cpus; i++) {
-        printf("%d:%d\n", i, nodemap[i]);
+	if (nodemap[i] < 0xffffffff)
+	        printf("%d:%d\n", i, nodemap[i]);
     }
 
 out1:
