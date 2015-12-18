@@ -74,7 +74,7 @@ static void cpus_to_nodes(void)
     }
 
     for (i = 0; i < max_cpus; i++) {
-        printf("CPU: %d NODE: %d\n", i, nodemap[i]);
+        printf("%d:%d\n", i, nodemap[i]);
     }
 
 out1:
