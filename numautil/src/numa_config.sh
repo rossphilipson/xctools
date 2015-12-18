@@ -1,6 +1,12 @@
 #!/bin/bash
 
-VMLIST=(VM1:0 VM2:0 VM3:1 VM4:1)         
+VMLIST=(WindowsVM1:0 WindowsVM2:1 ThinVM1:0 ThinVM2:0 ThinVM3:1 ThinVM4:1)
+
+CTON=(`./numautil -c`)
+
+for i in ${CTON[@]}; do
+     echo C-N: $i
+done
 
 for i in ${VMLIST[@]}; do
      echo Item: $i

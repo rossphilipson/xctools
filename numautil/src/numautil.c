@@ -47,7 +47,6 @@ static void cpus_to_nodes(void)
         printf("Unable to determine number of CPUS\n");
         goto out0;
     }
-    printf("MAX CPUS: %d\n", max_cpus);
 
     coremap = xc_hypercall_buffer_alloc
         (xch, coremap, sizeof(*coremap) * max_cpus);
