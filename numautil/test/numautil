@@ -1,0 +1,12 @@
+#!/bin/bash
+
+i=0
+n=0
+
+while [ $i -lt 40 ]; do
+    echo "$i:$n"
+    i=$[$i+1]
+    if [ $i -eq 20 ]; then
+        n=$[$n+1]
+    fi
+done

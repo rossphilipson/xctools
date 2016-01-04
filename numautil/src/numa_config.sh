@@ -10,6 +10,11 @@ CTON=(`./numautil -c`)
 for i in ${VMLIST[@]}; do
      vm=$(echo $i | cut -d\: -f1)
      node=$(echo $i | cut -d\: -f2)
-     echo Setting node affinity for $vm to $node
+     echo "Setting node affinity for $vm to $node"
+done
 
+for i in ${CTON[@]}; do
+     c=$(echo $i | cut -d\: -f1)
+     n=$(echo $i | cut -d\: -f2)
+     echo "C: $c N: $n"
 done
