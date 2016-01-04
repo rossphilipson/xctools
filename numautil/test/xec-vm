@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# xec-vm -n Win7x64VM1 get/set extra-hvm "settings"
+
+if [ $3 == "set" ]; then
+    echo "$5" > ./$2
+else
+    cat ./$2
+fi
