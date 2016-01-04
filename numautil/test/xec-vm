@@ -1,9 +1,13 @@
 #!/bin/bash
 
-# xec-vm -n Win7x64VM1 get/set extra-hvm "settings"
+# xec-vm -n Win7x64VM1 get/set extra-xenvm "settings"
 
 if [ $3 == "set" ]; then
     echo "$5" > ./$2
 else
-    cat ./$2
+    if [ $4 == "extra-xenvm" ]; then
+        cat ./$2
+    else
+        echo "4"
+    fi
 fi
