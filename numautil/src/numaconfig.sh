@@ -36,6 +36,14 @@ function set_extra_xenvm {
     echo "Setting VM $1 with $3 to $2"
 }
 
+function reset_dom0_vcpus {
+    echo "Resetup dom0 default vcpus"
+}
+
+function setup_dom0_vcpus {
+    echo "Setup dom0 with $DOM0 vcpus"
+}
+
 # Process the VM list
 for i in ${VMLIST[@]}; do
      vm=$(echo $i | cut -d\: -f1)
@@ -48,7 +56,10 @@ for i in ${VMLIST[@]}; do
      set_extra_xenvm $vm $node $vcpus
 done
 
-# Handle dom0
+# Reset dom0 VCPU settings to the default, i.e. nothing set
+reset_dom0_vcpus
+# Setup the new dom0 VCPU configuration
+setup_dom0_vcpus
 
 #for i in ${CTON[@]}; do
 #     c=$(echo $i | cut -d\: -f1)
