@@ -25,17 +25,33 @@ WinTPC6:1 WinTPC7:1 WinTPC8:1 WinTPC9:1 WinTPC10:1)
 # to zero will prevent the utility from changing dom0's default configuration.
 DOM0=4
 
-#CTON=(`./numautil -c`)
-CTON=(`../test/numautil -c`)
+# Use utility to get the CPU:NODE mapping for the system
+CTON=(`./numautil -c`)
 
+function reset_extra_xenvm {
+    echo "Resetting $1"
+}
+
+function set_extra_xenvm {
+    echo "Setting VM $1 with $3 to $2"
+}
+
+# Process the VM list
 for i in ${VMLIST[@]}; do
      vm=$(echo $i | cut -d\: -f1)
      node=$(echo $i | cut -d\: -f2)
-     echo "Setting node affinity for $vm to $node"
+     vcpus=`xec-vm -n $vm get vcpus`
+     echo "Setting node affinity for $vm with $vcpus vcpus to $node"
+     # Reset the extra-xenvm node, remove all cpus-affinity settings
+     reset_extra_xenvm $vm
+     # Set the new CPU affinity configuration
+     set_extra_xenvm $vm $node $vcpus
 done
 
-for i in ${CTON[@]}; do
-     c=$(echo $i | cut -d\: -f1)
-     n=$(echo $i | cut -d\: -f2)
-     echo "C: $c N: $n"
-done
+# Handle dom0
+
+#for i in ${CTON[@]}; do
+#     c=$(echo $i | cut -d\: -f1)
+#     n=$(echo $i | cut -d\: -f2)
+#     echo "C: $c N: $n"
+#done
