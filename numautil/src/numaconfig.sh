@@ -38,7 +38,7 @@ function form_affinity_param() {
          node=$(echo $i | cut -d\: -f2)
 
          if [ "$node" == "$2" ]; then
-             if [ -z $first ]; then
+             if [ -z "$first" ]; then
                  value="$value$cpu"
                  first="no"
              else
@@ -59,7 +59,7 @@ function reset_extra_xenvm() {
     do
         if [[ "$substr" =~ "affinity" ]]; then continue; fi
 
-        if [ -z $value ]; then
+        if [ -z "$value" ]; then
             value="$substr"
         else
             value+=";$substr"
@@ -77,7 +77,7 @@ function set_extra_xenvm() {
     while [ $vcpu -lt $3 ]; do
         affinity=$(form_affinity_param $vcpu $2)
 
-        if [ -z $value ]; then
+        if [ -z "$value" ]; then
             value="$affinity"
         else
             value+=";$affinity"

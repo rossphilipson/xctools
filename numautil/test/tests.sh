@@ -1,5 +1,11 @@
 #!/bin/bash
 
+#echo "console=com1 dom0_max_vcpus=4 dom0_mem=min:320M,max:320M,320M" | sed 's/dom0_max_vcpus=[[:digit:]]\+ \?//g'
+
+function test_grubber() {
+    
+}
+
 function test_reset {
     s="serial=tcp:192.168.2.11:7204,nodelay;cpus-affinity=0:0,1,2,3;cpus-affinity=1:0,1,2,3;usb=ehci"
     value=""
@@ -15,7 +21,7 @@ function test_reset {
         fi
         echo "Go"
 
-        if [ -z $value ]; then
+        if [ -z "$value" ]; then
             value="$substr"
         else
             value+=";$substr"
@@ -25,4 +31,4 @@ function test_reset {
     echo "Value $value"
 }
 
-test_reset
+test_grubber
