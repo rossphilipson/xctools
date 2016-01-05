@@ -29,8 +29,29 @@ DOM0=4
 # Use utility to get the CPU:NODE mapping for the system
 CTON=(`./numautil -c`)
 
-function reset_extra_xenvm {
-    value=""
+function form_affinity_param() {
+     local value="cpus-affinity=$1:"
+     local first=""
+
+     for i in ${CTON[@]}; do
+         cpu=$(echo $i | cut -d\: -f1)
+         node=$(echo $i | cut -d\: -f2)
+
+         if [ "$node" == "$2" ]; then
+             if [ -z $first ]; then
+                 value="$value$cpu"
+                 first="no"
+             else
+                 value="$value,$cpu"
+             fi
+         fi
+     done
+
+     echo "$value"
+}
+
+function reset_extra_xenvm() {
+    local value=""
 
     IFS=';' read -r -a subarr <<< "`xec-vm -n $1 get extra-xenvm`"
 
@@ -49,15 +70,30 @@ function reset_extra_xenvm {
     echo "Reset VM $1 to value $value"
 }
 
-function set_extra_xenvm {
-    echo "Setting VM $1 with $3 to $2"
+function set_extra_xenvm() {
+    local value=`xec-vm -n $1 get extra-xenvm`
+    local vcpu=0
+
+    while [ $vcpu -lt $3 ]; do
+        affinity=$(form_affinity_param $vcpu $2)
+
+        if [ -z $value ]; then
+            value="$affinity"
+        else
+            value+=";$affinity"
+        fi
+        vcpu=$[$vcpu+1]
+    done
+
+    xec-vm -n $1 set extra-xenvm $value
+    echo "Setting VM $1 to value $value"
 }
 
-function reset_dom0_vcpus {
+function reset_dom0_vcpus() {
     echo "Resetup dom0 default vcpus"
 }
 
-function setup_dom0_vcpus {
+function setup_dom0_vcpus() {
     echo "Setup dom0 with $DOM0 vcpus"
 }
 
