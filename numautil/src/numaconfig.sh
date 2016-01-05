@@ -11,10 +11,11 @@
 # be in node 0. So it makes sense to assign the Network VM to that since it
 # has the integrated NICs assigned to it (those devices being on the PCI(e)
 # bus on the PCH.
-VMLIST=(Windows7VM1:1 Windows7VM2:1
-Windows7VM3:1 Windows7VM4:1 Network:0
-WinTPC1:0 WinTPC2:0 WinTPC3:0 WinTPC4:0 WinTPC5:0
-WinTPC6:1 WinTPC7:1 WinTPC8:1 WinTPC9:1 WinTPC10:1)
+#VMLIST=(Windows7VM1:1 Windows7VM2:1
+#Windows7VM3:1 Windows7VM4:1 Network:0
+#WinTPC1:0 WinTPC2:0 WinTPC3:0 WinTPC4:0 WinTPC5:0
+#WinTPC6:1 WinTPC7:1 WinTPC8:1 WinTPC9:1 WinTPC10:1)
+VMLIST=(Windows7VM1:1)
 
 # Dom0 is a special case because it needs its VCPU affinity set at boot time.
 # This is done using e.g. "dom0_max_vcpus=4 dom0_vcpus_pin" on the grub command
@@ -29,7 +30,23 @@ DOM0=4
 CTON=(`./numautil -c`)
 
 function reset_extra_xenvm {
-    echo "Resetting $1"
+    value=""
+
+    IFS=';' read -r -a subarr <<< "`xec-vm -n $1 get extra-xenvm`"
+
+    for substr in "${subarr[@]}"
+    do
+        if [[ "$substr" =~ "affinity" ]]; then continue; fi
+
+        if [ -z $value ]; then
+            value="$substr"
+        else
+            value+=";$substr"
+        fi
+    done
+
+    xec-vm -n $1 set extra-xenvm $value
+    echo "Reset VM $1 to value $value"
 }
 
 function set_extra_xenvm {
