@@ -3,7 +3,7 @@
 #echo "console=com1 dom0_max_vcpus=4 dom0_mem=min:320M,max:320M,320M" | sed 's/dom0_max_vcpus=[[:digit:]]\+ \?//g'
 
 function test_grubber() {
-    
+    cat ./grub.cfg | sed 's/dom0_max_vcpus=[[:digit:]]\+ \?//g' | sed 's/ \?dom0_vcpus_pin \?//g' > ./out.cfg
 }
 
 function test_reset {
