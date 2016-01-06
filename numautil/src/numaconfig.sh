@@ -5,19 +5,19 @@
 # of the form VMName:NUMANode. Any VMs not listed will not have any node
 # affinity set. The primary reason is to allow a guest to only use memory local
 # to the CPUs in the node that the VM has affinity to. The second way this is
-# useful is for device pass-through where PCI(e) devices have proximity to one
+# useful is for device pass-through where PCIe devices have proximity to one
 # node or another. E.g. most systems will have thier PCH have proximity to
-# NUMA node 0 since by default if there is only one processor package it will
-# be in node 0. So it makes sense to assign the Network VM to that since it
-# has the integrated NICs assigned to it (those devices being on the PCI(e)
-# bus on the PCH.
+# NUMA node 0 (since by default if there is only one processor package it will
+# be in node 0). So it makes sense to assign the Network VM to that node since
+# it has the integrated NICs assigned to it (those devices being on the PCI(e)
+# bus on the PCH).
 VMLIST=(Windows7VM1:1 Windows7VM2:1
 Windows7VM3:1 Windows7VM4:1 Network:0
 WinTPC1:0 WinTPC2:0 WinTPC3:0 WinTPC4:0 WinTPC5:0
 WinTPC6:1 WinTPC7:1 WinTPC8:1 WinTPC9:1 WinTPC10:1)
 
 # Dom0 is a special case because it needs its VCPU affinity set at boot time.
-# This is done using e.g. "dom0_max_vcpus=4 dom0_vcpus_pin" on the grub command
+# This is done using e.g. "dom0_max_vcpus=4 dom0_vcpus_pin" on the Xen command
 # line. This says give dom0 4 VCPUs and pin them to the first 4 CPUs. Though
 # this is a bit limiting it is mostly fine since dom0 is the domain where all
 # the devices on the PCH live that are not passed through. So in this example,
@@ -56,7 +56,7 @@ function reset_extra_xenvm() {
 
     for substr in "${subarr[@]}"
     do
-        if [[ "$substr" =~ "affinity" ]]; then continue; fi
+        [[ "$substr" =~ "affinity" ]] && continue
 
         if [ -z "$value" ]; then
             value="$substr"
@@ -91,13 +91,10 @@ function set_extra_xenvm() {
 function setup_dom0_vcpus() {
     echo "Setup dom0 with $DOM0 vcpus"
 
-    if [ ! -f /boot/system/grub/grub.orig ]; then
-        cp /boot/system/grub/grub.cfg /boot/system/grub/grub.orig
-    fi
+    if [ $DOM0 -gt 0 ]; then
+        [ ! -f /boot/system/grub/grub.orig ] && cp /boot/system/grub/grub.cfg /boot/system/grub/grub.orig
 
-    cat /boot/system/grub/grub.cfg | sed 's/dom0_max_vcpus=[[:digit:]]\+ \?//g' | sed 's/ \?dom0_vcpus_pin \?//g' > /boot/system/grub/tmp.cfg
-
-    if [ "$DOM0" -ne "0" ]; then
+        cat /boot/system/grub/grub.cfg | sed 's/dom0_max_vcpus=[[:digit:]]\+ \?//g' | sed 's/ \?dom0_vcpus_pin \?//g' > /boot/system/grub/tmp.cfg
         cat /boot/system/grub/tmp.cfg | sed "s/XEN_COMMON_CMD=\"/XEN_COMMON_CMD=\"dom0_max_vcpus=$DOM0 dom0_vcpus_pin /" > /boot/system/grub/grub.cfg
     fi
 }
