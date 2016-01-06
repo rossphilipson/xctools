@@ -79,7 +79,7 @@ function reset_extra_xenvm() {
         fi
     done
 
-    xec-vm -n $1 set extra-xenvm $value
+    xec-vm -n $1 set extra-xenvm "$value"
     echo "Reset VM $1 to value $value"
 }
 
