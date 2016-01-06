@@ -24,8 +24,7 @@
 # be in node 0). So it makes sense to assign the Network VM to that node since
 # it has the integrated NICs assigned to it (those devices being on the PCI(e)
 # bus on the PCH).
-VMLIST=(Windows7VM1:1 Windows7VM2:1
-Windows7VM3:1 Windows7VM4:1 Network:0
+VMLIST=(Win7VM1:1 Win7VM2:1 Win7VM3:1 Win7VM4:1 Network:0
 WinTPC1:0 WinTPC2:0 WinTPC3:0 WinTPC4:0 WinTPC5:0
 WinTPC6:1 WinTPC7:1 WinTPC8:1 WinTPC9:1 WinTPC10:1)
 
@@ -99,7 +98,7 @@ function set_extra_xenvm() {
         vcpu=$[$vcpu+1]
     done
 
-    xec-vm -n $1 set extra-xenvm $value
+    xec-vm -n $1 set extra-xenvm "$value"
     echo "Setting VM $1 to value $value"
 }
 
