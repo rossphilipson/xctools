@@ -116,7 +116,7 @@ function setup_dom0_vcpus() {
     if [ $DOM0 -gt 0 ]; then
         [ ! -f /boot/system/grub/grub.orig ] && cp /boot/system/grub/grub.cfg /boot/system/grub/grub.orig
 
-        cat /boot/system/grub/grub.cfg | sed 's/dom0_max_vcpus=[[:digit:]]\+ \?//g' | sed 's/ \?dom0_vcpus_pin \?//g' > /boot/system/grub/tmp.cfg
+        cat /boot/system/grub/grub.cfg | sed 's/dom0_max_vcpus=[[:digit:]]\+ \?//g' | sed 's/dom0_vcpus_pin \?//g' > /boot/system/grub/tmp.cfg
         cat /boot/system/grub/tmp.cfg | sed "s/XEN_COMMON_CMD=\"/XEN_COMMON_CMD=\"dom0_max_vcpus=$DOM0 dom0_vcpus_pin /" > /boot/system/grub/grub.cfg
     fi
 }
