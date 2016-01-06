@@ -7,6 +7,14 @@
 # $ nr
 # $ setenforcing 0
 #
+# If any of the VMs are NDVMs, the configuration files must be modified to
+# allow the VMs configurations to be edited. This is done by editing
+# /config/vms/00000000-0000-0000-0000-000000000002.db and setting
+# "modify-vm-settings" to "true". After this is done the dbd must be told to
+# reload settings like this:
+#
+# $ kill -SIGHUP <pid-of-dbd>
+#
 # Then setup the configuration below (Steps 1 and 2) for the system in
 # question and run the script. Note this will change the system measurements
 # too so a reseal will need to be done on reboot.
@@ -118,6 +126,7 @@ for i in ${VMLIST[@]}; do
      vm=$(echo $i | cut -d\: -f1)
      node=$(echo $i | cut -d\: -f2)
      vcpus=`xec-vm -n $vm get vcpus`
+     [ $vcpus -lt 1 ] && vcpus=1
      echo "Setting node affinity for $vm with $vcpus vcpus to $node"
      # Reset the extra-xenvm node, remove all cpus-affinity settings
      reset_extra_xenvm $vm
