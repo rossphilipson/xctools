@@ -1,5 +1,18 @@
 #!/bin/bash
 
+# Use this utility to setup NUMA node affinity on the OpenXT platform. To use
+# it, copy this file and the numautil binary found in ../bin to a location on
+# the OpenXT system (e.g. /storage). SELinux mush be disabled to use this:
+#
+# $ nr
+# $ setenforcing 0
+#
+# Then setup the configuration below (Steps 1 and 2) for the system in
+# question and run the script. Note this will change the system measurements
+# too so a reseal will need to be done on reboot.
+
+# Step 1:
+#
 # The following list specifies what NUMA node to set the VCPU affinity to for
 # each of the listed VMs. This is just a sample configuration. The values are
 # of the form VMName:NUMANode. Any VMs not listed will not have any node
@@ -16,6 +29,8 @@ Windows7VM3:1 Windows7VM4:1 Network:0
 WinTPC1:0 WinTPC2:0 WinTPC3:0 WinTPC4:0 WinTPC5:0
 WinTPC6:1 WinTPC7:1 WinTPC8:1 WinTPC9:1 WinTPC10:1)
 
+# Step 2:
+#
 # Dom0 is a special case because it needs its VCPU affinity set at boot time.
 # This is done using e.g. "dom0_max_vcpus=4 dom0_vcpus_pin" on the Xen command
 # line. This says give dom0 4 VCPUs and pin them to the first 4 CPUs. Though
