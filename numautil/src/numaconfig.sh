@@ -11,11 +11,10 @@
 # be in node 0. So it makes sense to assign the Network VM to that since it
 # has the integrated NICs assigned to it (those devices being on the PCI(e)
 # bus on the PCH.
-#VMLIST=(Windows7VM1:1 Windows7VM2:1
-#Windows7VM3:1 Windows7VM4:1 Network:0
-#WinTPC1:0 WinTPC2:0 WinTPC3:0 WinTPC4:0 WinTPC5:0
-#WinTPC6:1 WinTPC7:1 WinTPC8:1 WinTPC9:1 WinTPC10:1)
-VMLIST=(Windows7VM1:1)
+VMLIST=(Windows7VM1:1 Windows7VM2:1
+Windows7VM3:1 Windows7VM4:1 Network:0
+WinTPC1:0 WinTPC2:0 WinTPC3:0 WinTPC4:0 WinTPC5:0
+WinTPC6:1 WinTPC7:1 WinTPC8:1 WinTPC9:1 WinTPC10:1)
 
 # Dom0 is a special case because it needs its VCPU affinity set at boot time.
 # This is done using e.g. "dom0_max_vcpus=4 dom0_vcpus_pin" on the grub command
@@ -89,12 +88,18 @@ function set_extra_xenvm() {
     echo "Setting VM $1 to value $value"
 }
 
-function reset_dom0_vcpus() {
-    echo "Resetup dom0 default vcpus"
-}
-
 function setup_dom0_vcpus() {
     echo "Setup dom0 with $DOM0 vcpus"
+
+    if [ ! -f /boot/system/grub/grub.orig ]; then
+        cp /boot/system/grub/grub.cfg /boot/system/grub/grub.orig
+    fi
+
+    cat /boot/system/grub/grub.cfg | sed 's/dom0_max_vcpus=[[:digit:]]\+ \?//g' | sed 's/ \?dom0_vcpus_pin \?//g' > /boot/system/grub/tmp.cfg
+
+    if [ "$DOM0" -ne "0" ]; then
+        cat /boot/system/grub/tmp.cfg | sed "s/XEN_COMMON_CMD=\"/XEN_COMMON_CMD=\"dom0_max_vcpus=$DOM0 dom0_vcpus_pin /" > /boot/system/grub/grub.cfg
+    fi
 }
 
 # Process the VM list
@@ -109,14 +114,6 @@ for i in ${VMLIST[@]}; do
      set_extra_xenvm $vm $node $vcpus
 done
 
-# Reset dom0 VCPU settings to the default, i.e. nothing set
-reset_dom0_vcpus
-# Setup the new dom0 VCPU configuration
+# Setup the new dom0 VCPU configuration, remove previous settings
 setup_dom0_vcpus
-
-#for i in ${CTON[@]}; do
-#     c=$(echo $i | cut -d\: -f1)
-#     n=$(echo $i | cut -d\: -f2)
-#     echo "C: $c N: $n"
-#done
 
