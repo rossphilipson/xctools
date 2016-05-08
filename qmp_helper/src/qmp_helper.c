@@ -59,7 +59,6 @@ do {                                                               \
   (V4V_ROUNDUP((((4096)*4) - sizeof(v4v_ring_t)-V4V_ROUNDUP(1))))
 
 #define V4V_CHARDRV_NAME  "[v4v-chardrv]"
-#define V4V_CHARDRV_HELLO "d2bb2546-155e-11e6-bf28-af0531854834"
 
 struct qmp_helper_state { 
     int v4v_fd;
@@ -144,8 +143,6 @@ static void signal_handler(int sig)
 
 int main(int argc, char *argv[]) {
 {
-    int ret;
-
     openlog(NULL, LOG_NDELAY, LOG_DAEMON);
 
     PT_LOG("starting %s\n", argv[0]);
@@ -169,21 +166,6 @@ int main(int argc, char *argv[]) {
     if (init_helper_state(&qhs) != 0) {
         PT_LOG("failed to init helper!\n");
         return -1;
-    }
-
-    PT_DEBUG("wait for hello from stubdom (%d)", g_hs.stubdom_id);
-
-    /* QMP heler must start first and wait for the hello */
-    ret = v4v_recvfrom(qhs.v4v_fd, qhs.recv_buf, sizeof(qhs.recv_buf),
-                       0, &qhs.remote_addr);
-    if (ret < 0) {
-        PT_LOG("v4v_recvfrom hello failed!\n");
-        exit_cleanup(ret);
-    }
-
-    if ((ret != sizeof(V4V_CHARDRV_HELLO) - 1) ||
-        (strncmp(V4V_CHARDRV_HELLO, qhs.recv_buf, sizeof(V4V_CHARDRV_HELLO)))) {
-        /* TODO die here of move into loop and try again? */
     }
 
     while (!pending_exit) {
