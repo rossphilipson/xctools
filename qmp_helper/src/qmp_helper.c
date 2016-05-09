@@ -187,11 +187,9 @@ int main(int argc, char *argv[]) {
 
         if (FD_ISSET(qhs.v4v_fd, &rfds)) {
         }
-        else if (FD_ISSET(qhs.unix_fd, &rfds)) {
+
+        if (FD_ISSET(qhs.unix_fd, &rfds)) {
         }
-        else {
-            /* TODO warning */
-        } 
     }
 
     PT_LOG("exiting...\n");
