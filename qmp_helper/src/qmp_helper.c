@@ -23,7 +23,6 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-
 #include "project.h"
 
 #include <syslog.h>
@@ -61,11 +60,11 @@ do {                                                               \
 #define V4V_CHARDRV_NAME  "[v4v-chardrv]"
 
 struct qmp_helper_state { 
+    int stubdom_id;
     int v4v_fd;
     v4v_addr_t remote_addr;
     v4v_addr_t local_addr;
-    int unix_fg;
-    int stubdom_id;
+    int unix_fd;
     uint8_t recv_buf[V4V_CHARDRV_RING_SIZE];
 };
 
@@ -83,6 +82,8 @@ static void exit_cleanup(int exit_code)
     int i;
 
     pending_exit = 1;
+
+    /* TODO deal with open connections */
 
     /* close local UNIX socket */
     closesocket(qhs.unix_fd);
@@ -143,6 +144,9 @@ static void signal_handler(int sig)
 
 int main(int argc, char *argv[]) {
 {
+    fd_set rfds;
+    int nfds, ret;
+
     openlog(NULL, LOG_NDELAY, LOG_DAEMON);
 
     PT_LOG("starting %s\n", argv[0]);
@@ -168,8 +172,26 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    FD_ZERO(&rfds);
+    FD_SET(qhs.v4v_fd, &rfds);
+    FD_SET(qhs.unix_fd, &rfds);
+    nfds = ((qhs.v4v_fd > qhs->unix_fd) ? qhs.v4v_fd : qhs.unix_fd) + 1;
+
     while (!pending_exit) {
-        /* TODO select loop goes here */
+
+        if (select(nfds, &rfds, NULL, NULL, NULL) == -1) {
+            ret = errno;
+            PT_LOG("failure during select - err: %d\n", ret);
+            exit_cleanup(ret);
+        }
+
+        if (FD_ISSET(qhs.v4v_fd, &rfds)) {
+        }
+        else if (FD_ISSET(qhs.unix_fd, &rfds)) {
+        }
+        else {
+            /* TODO warning */
+        } 
     }
 
     PT_LOG("exiting...\n");
