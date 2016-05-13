@@ -48,33 +48,6 @@
 #  include <sys/int_types.h>
 # endif
 
-# ifdef HAVE_ERRNO_H
-#  include <errno.h>
-# endif
-
-# ifdef HAVE_ASSERT_H
-#  include <assert.h>
-# endif
-
-# ifdef HAVE_SIGNAL_H
-#  include <signal.h>
-# endif
-
-# ifdef HAVE_SYS_SOCKET_H
-#  include <sys/socket.h>
-# endif
-
-# ifdef HAVE_SYS_TYPES_H
-#  include <sys/types.h>
-# endif
-
-# ifdef HAVE_SYS_STAT_H
-#  include <sys/stat.h>
-# endif
-
-# ifdef HAVE_LIBV4V_H
-#  include <libv4v.h>
-# endif
 
 #include "prototypes.h"
 

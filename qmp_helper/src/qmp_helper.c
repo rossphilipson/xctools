@@ -2,10 +2,9 @@
  *
  * QMP toolstack to stubdomain helper. This simple helper proxies a QMP
  * traffic between a local UNIX socket and a remote V4V QMP chardrv QEMU in
- * the stubdomain. Initially based off of Chris Patterson's atapi_pt_helper.c.
+ * the stubdomain.
  *
  * Copyright (c) 2016 Assured Information Security, Ross Philipson <philipsonr@ainfosec.com>
- * Copyright (c) 2015 Assured Information Security, Chris Patterson <pattersonc@ainfosec.com>
  * Copyright (c) 2014 Citrix Systems, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -25,7 +24,18 @@
 
 #include "project.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <assert.h>
+#include <signal.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <syslog.h>
+#include <libv4v.h>
 
 static int pt_log_level = 0;
 
@@ -35,8 +45,8 @@ static int pt_log_level = 0;
  */
 #define PT_LOG(fmt, ...)                                           \
 do {                                                               \
-        syslog(LOG_NOTICE, "[%s:%s:%d] (stubdom-%d) " fmt,          \
-               __FILE__, __FUNCTION__, __LINE__, g_hs.stubdom_id,  \
+        syslog(LOG_NOTICE, "[%s:%s:%d] (stubdom-%d) " fmt,         \
+               __FILE__, __FUNCTION__, __LINE__, qhs.stubdom_id,   \
                  ##__VA_ARGS__);                                   \
     } while (0)
 
@@ -74,38 +84,25 @@ static struct qmp_helper_state qhs;
 
 static int pending_exit = 0;
 
-/**
- * Time to bail! Will call exit() with exit_code.
- * @param[in] exit_code
- */
 static void exit_cleanup(int exit_code)
 {
-    int i;
-
     pending_exit = 1;
 
     /* TODO deal with open connections */
 
     /* close local UNIX socket */
-    closesocket(qhs.unix_fd);
+    close(qhs.unix_fd);
     qhs.unix_fd = -1;
 
     /* close v4v channel to stubdom */
     v4v_close(qhs.v4v_fd);
     qhs.v4v_fd = -1;
 
-    /* close syslog */
     closelog();
 
-    /* time to bail */
     exit(exit_code);
 }
 
-/**
- * Initializes helper state.
- * @param[in] qhs
- * @returns 0 on succes, otherwise -1.
- */
 static int init_helper_state(struct qmp_helper_state *pqhs)
 {
     uint32_t v4v_ring_size = V4V_CHARDRV_RING_SIZE;
@@ -119,8 +116,8 @@ static int init_helper_state(struct qmp_helper_state *pqhs)
     pqhs->local_addr.port = V4V_QH_PORT;
     pqhs->local_addr.domain = V4V_DOMID_ANY;
 
-    hs->remote_addr.port = V4V_PORT_NONE;
-    hs->remote_addr.domain = pqhs->stubdom_id;
+    pqhs->remote_addr.port = V4V_PORT_NONE;
+    pqhs->remote_addr.domain = pqhs->stubdom_id;
 
     /* TODO check for errors */
     ioctl(pqhs->v4v_fd, V4VIOCSETRINGSIZE, &v4v_ring_size);
@@ -143,7 +140,7 @@ static void signal_handler(int sig)
     exit_cleanup(0);
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
 {
     fd_set rfds;
     int nfds, ret;
@@ -173,7 +170,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    PT_DEBUG("wait for hello from stubdom (%d)", g_hs.stubdom_id);
+    PT_DEBUG("wait for hello from stubdom (%d)", qhs.stubdom_id);
 
     /* QMP heler must start first and wait for the hello */
     ret = v4v_recvfrom(qhs.v4v_fd, qhs.recv_buf, sizeof(qhs.recv_buf),
@@ -184,14 +181,15 @@ int main(int argc, char *argv[]) {
     }
 
     if ((ret != sizeof(V4V_CHARDRV_HELLO) - 1) ||
-        (strncmp(V4V_CHARDRV_HELLO, qhs.recv_buf, sizeof(V4V_CHARDRV_HELLO)))) {
+        (strncmp(V4V_CHARDRV_HELLO, (const char*)qhs.recv_buf,
+                 sizeof(V4V_CHARDRV_HELLO)))) {
         /* TODO die here of move into loop and try again? */
     }
 
     FD_ZERO(&rfds);
     FD_SET(qhs.v4v_fd, &rfds);
     FD_SET(qhs.unix_fd, &rfds);
-    nfds = ((qhs.v4v_fd > qhs->unix_fd) ? qhs.v4v_fd : qhs.unix_fd) + 1;
+    nfds = ((qhs.v4v_fd > qhs.unix_fd) ? qhs.v4v_fd : qhs.unix_fd) + 1;
 
     while (!pending_exit) {
 
