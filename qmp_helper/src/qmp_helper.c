@@ -30,7 +30,10 @@
 #include <errno.h>
 #include <assert.h>
 #include <signal.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
@@ -75,7 +78,9 @@ struct qmp_helper_state {
     int v4v_fd;
     v4v_addr_t remote_addr;
     v4v_addr_t local_addr;
+    int connected;
     int unix_fd;
+    int msgfd;
     uint8_t recv_buf[V4V_CHARDRV_RING_SIZE];
 };
 
@@ -88,9 +93,9 @@ static void qmph_exit_cleanup(int exit_code)
 {
     pending_exit = 1;
 
-    /* TODO deal with open connections */
+    QMPH_DEBUG("exiting %d", exit_code);
 
-    /* close local UNIX socket */
+    /* close connection on the UNIX socket */
     close(qhs.unix_fd);
     qhs.unix_fd = -1;
 
@@ -102,6 +107,8 @@ static void qmph_exit_cleanup(int exit_code)
 
     exit(exit_code);
 }
+
+/** V4V Socket *****************************************************/
 
 static int qmph_init_v4v_socket(struct qmp_helper_state *pqhs)
 {
@@ -119,23 +126,86 @@ static int qmph_init_v4v_socket(struct qmp_helper_state *pqhs)
     pqhs->remote_addr.port = V4V_PORT_NONE;
     pqhs->remote_addr.domain = pqhs->stubdom_id;
 
-    /* TODO check for errors */
-    ioctl(pqhs->v4v_fd, V4VIOCSETRINGSIZE, &v4v_ring_size);
+    if (ioctl(pqhs->v4v_fd, V4VIOCSETRINGSIZE, &v4v_ring_size) == -1) {
+        QMPH_LOG("unable to send ioctl V4VIOCSETRINGSIZE to v4vsocket");
+        goto err;
+    }
 
     if (v4v_bind(pqhs->v4v_fd, &pqhs->local_addr, pqhs->stubdom_id) == -1) {
         QMPH_LOG("unable to bind the v4vsocket");
-        v4v_close(pqhs->v4v_fd);
-        pqhs->v4v_fd = -1;
-        return -1;
+        goto err;
     }
 
     return 0;
+
+err:
+    v4v_close(pqhs->v4v_fd);
+    pqhs->v4v_fd = -1;
+    return -1;
 }
+
+/** Unix Socket ****************************************************/
 
 static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
 {
-    /* TODO open the UNIX socket */
+    struct sockaddr_un un;
+    socklen_t len = sizeof(un);
+    int lfd, cfd;
+
+    /* By default the helper creates a Unix socket as if QEMU were called with:
+     * -qmp unix:/var/run/xen/qmp-libxl-<domid>,server,nowait
+     */
+
+    pqhs->connected = 0;
+    pqhs->unix_fd = -1;
+    pqhs->msgfd = -1;
+
+    /* First step, start the listener then wait for a connection */
+    lfd = socket(PF_UNIX, SOCK_STREAM, 0);
+    if (lfd < 0) {
+        QMPH_LOG("create socket failed - err: %d", errno);
+        return -1;
+    }
+
+    memset(&un, 0, sizeof(un));
+    un.sun_family = AF_UNIX;
+    snprintf(un.sun_path, sizeof(un.sun_path),
+             "/var/run/xen/qmp-libxl-%d", pqhs->stubdom_id);
+
+    unlink(un.sun_path);
+
+    if (bind(lfd, (struct sockaddr*)&un, sizeof(un)) < 0) {
+        QMPH_LOG("bind socket failed - err: %d", errno);
+        goto err;
+    }
+
+    if (listen(lfd, 1) < 0) {
+        QMPH_LOG("listen socket failed - err: %d", errno);
+        goto err;
+    }
+
+    memset(&un, 0, sizeof(un));
+
+    cfd = accept(lfd, (struct sockaddr*)&un, &len);
+    if (cfd < 0) {
+        QMPH_LOG("listen socket failed - err: %d", errno);
+        goto err;
+    }
+
+    /* Done listening */
+    close(lfd);
+
+    /* nodelay is non-blocking for the connection fd */
+    fcntl(cfd, F_SETFL, fcntl(cfd, F_GETFL) | O_NONBLOCK);
+
+    pqhs->connected = 1;
+    pqhs->unix_fd = cfd;
+
     return 0;
+
+err:
+    close(lfd);
+    return -1;
 }
 
 static void qmph_signal_handler(int sig)
@@ -169,8 +239,9 @@ int main(int argc, char *argv[])
 
     signal(SIGINT, qmph_signal_handler);
 
-    if (qmph_init_v4v_socket(&qhs) != 0) {
-        QMPH_LOG("failed to init v4v socket!\n");
+    ret = qmph_init_v4v_socket(&qhs);
+    if (ret) {
+        QMPH_LOG("failed to init v4v socket - ret: %d\n", ret);
         return -1;
     }
 
@@ -188,6 +259,15 @@ int main(int argc, char *argv[])
         (strncmp(V4V_CHARDRV_HELLO, (const char*)qhs.recv_buf,
                  sizeof(V4V_CHARDRV_HELLO)))) {
         QMPH_LOG("v4v hello from stubdom failed - ret len: %d\n", ret);
+        qmph_exit_cleanup(ret);
+    }
+
+    /* Ready to listen and accept one connection. Note this will block on
+     * accept until connected.
+     */
+    ret = qmph_init_unix_socket(&qhs);
+    if (ret) {
+        QMPH_LOG("failed to init unix socket - ret: %d\n", ret);
         qmph_exit_cleanup(ret);
     }
 
