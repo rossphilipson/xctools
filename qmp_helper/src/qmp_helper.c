@@ -40,8 +40,6 @@
 #include <syslog.h>
 #include <libv4v.h>
 
-static int qmph_log_level = 0;
-
 /**
  * QMPH_LOG: information to always log (errors & important low-volume events)
  * @param fmt,... printf style arguments
@@ -51,16 +49,6 @@ do {                                                               \
         syslog(LOG_NOTICE, "[%s:%s:%d] (stubdom-%d) " fmt,         \
                __FILE__, __FUNCTION__, __LINE__, qhs.stubdom_id,   \
                  ##__VA_ARGS__);                                   \
-    } while (0)
-
-/**
- * QMPH_DEBUG: debug level
- * @param fmt,... printf style arguments
- */
-#define QMPH_DEBUG(fmt, ...)                                             \
-    do {                                                               \
-        if (qmph_log_level >= 2)                                       \
-            QMPH_LOG(fmt, ## __VA_ARGS__);                                  \
     } while (0)
 
 #define V4V_TYPE 'W'
@@ -78,10 +66,8 @@ struct qmp_helper_state {
     int v4v_fd;
     v4v_addr_t remote_addr;
     v4v_addr_t local_addr;
-    int connected;
     int unix_fd;
-    int msgfd;
-    uint8_t recv_buf[V4V_CHARDRV_RING_SIZE];
+    uint8_t msg_buf[V4V_CHARDRV_RING_SIZE];
 };
 
 /* global helper state */
@@ -92,8 +78,6 @@ static int pending_exit = 0;
 static void qmph_exit_cleanup(int exit_code)
 {
     pending_exit = 1;
-
-    QMPH_DEBUG("exiting %d", exit_code);
 
     /* close connection on the UNIX socket */
     close(qhs.unix_fd);
@@ -108,7 +92,73 @@ static void qmph_exit_cleanup(int exit_code)
     exit(exit_code);
 }
 
-/** V4V Socket *****************************************************/
+static void qmph_set_blocking_mode(int fd, int blocking)
+{
+    int f;
+
+    f = fcntl(fd, F_GETFL);
+
+    if (blocking)
+        fcntl(fd, F_SETFL, f & ~O_NONBLOCK);
+    else
+        fcntl(fd, F_SETFL, f | O_NONBLOCK);
+}
+
+static int qmph_unix_to_v4v(struct qmp_helper_state *pqhs)
+{
+    int ret, rcv;
+
+    rcv = read(pqhs->unix_fd, pqhs->msg_buf, sizeof(pqhs->msg_buf));
+    if (rcv < 0) {
+        QMPH_LOG("ERROR read(unix_fd) failed (%s) - %d.\n",
+                 strerror(errno), rcv);
+        return rcv;
+    }
+    else if (rcv == 0) {
+        QMPH_LOG("read(unix_fd) recieved EOF, exiting.\n");
+        qmph_exit_cleanup(0);
+    }
+
+    qmph_set_blocking_mode(pqhs->v4v_fd, 1);
+
+    ret = v4v_sendto(pqhs->v4v_fd, pqhs->msg_buf,
+                     rcv, 0, &pqhs->remote_addr);
+    if (ret != rcv) {
+        QMPH_LOG("ERROR v4v_sendto() failed (%s) - %d %d.\n",
+                 strerror(errno), ret, rcv);
+        return -1;
+    }
+
+    qmph_set_blocking_mode(pqhs->v4v_fd, 0);
+
+    return 0;
+}
+
+static int qmph_v4v_to_unix(struct qmp_helper_state *pqhs)
+{
+    int ret, rcv;
+
+    rcv = v4v_recvfrom(pqhs->v4v_fd, pqhs->msg_buf, sizeof(pqhs->msg_buf),
+                       0, &pqhs->remote_addr);
+    if (rcv < 0) {
+        QMPH_LOG("ERROR v4v_recvfrom() failed (%s) - %d.\n",
+                 strerror(errno), rcv);
+        return rcv;
+    }
+
+    qmph_set_blocking_mode(pqhs->unix_fd, 1);
+
+    ret = write(pqhs->unix_fd, pqhs->msg_buf, rcv);
+    if (ret < 0) {
+        QMPH_LOG("ERROR write(unix_fd) failed (%s) - %d.\n",
+                 strerror(errno), ret);
+        return ret;
+    }
+
+    qmph_set_blocking_mode(pqhs->unix_fd, 0);
+
+    return 0;
+}
 
 static int qmph_init_v4v_socket(struct qmp_helper_state *pqhs)
 {
@@ -116,7 +166,7 @@ static int qmph_init_v4v_socket(struct qmp_helper_state *pqhs)
 
     pqhs->v4v_fd = v4v_socket(SOCK_DGRAM);
     if (pqhs->v4v_fd == -1) {
-        QMPH_LOG("unable to create a v4vsocket");
+        QMPH_LOG("ERROR unable to create a v4vsocket");
         return -1;
     }
 
@@ -127,12 +177,12 @@ static int qmph_init_v4v_socket(struct qmp_helper_state *pqhs)
     pqhs->remote_addr.domain = pqhs->stubdom_id;
 
     if (ioctl(pqhs->v4v_fd, V4VIOCSETRINGSIZE, &v4v_ring_size) == -1) {
-        QMPH_LOG("unable to send ioctl V4VIOCSETRINGSIZE to v4vsocket");
+        QMPH_LOG("ERROR unable to send ioctl V4VIOCSETRINGSIZE to v4vsocket");
         goto err;
     }
 
     if (v4v_bind(pqhs->v4v_fd, &pqhs->local_addr, pqhs->stubdom_id) == -1) {
-        QMPH_LOG("unable to bind the v4vsocket");
+        QMPH_LOG("ERROR unable to bind the v4vsocket");
         goto err;
     }
 
@@ -144,8 +194,6 @@ err:
     return -1;
 }
 
-/** Unix Socket ****************************************************/
-
 static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
 {
     struct sockaddr_un un;
@@ -156,14 +204,12 @@ static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
      * -qmp unix:/var/run/xen/qmp-libxl-<domid>,server,nowait
      */
 
-    pqhs->connected = 0;
     pqhs->unix_fd = -1;
-    pqhs->msgfd = -1;
 
     /* First step, start the listener then wait for a connection */
     lfd = socket(PF_UNIX, SOCK_STREAM, 0);
     if (lfd < 0) {
-        QMPH_LOG("create socket failed - err: %d", errno);
+        QMPH_LOG("ERROR create socket failed - err: %d", errno);
         return -1;
     }
 
@@ -175,12 +221,12 @@ static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
     unlink(un.sun_path);
 
     if (bind(lfd, (struct sockaddr*)&un, sizeof(un)) < 0) {
-        QMPH_LOG("bind socket failed - err: %d", errno);
+        QMPH_LOG("ERROR bind socket failed - err: %d", errno);
         goto err;
     }
 
     if (listen(lfd, 1) < 0) {
-        QMPH_LOG("listen socket failed - err: %d", errno);
+        QMPH_LOG("ERROR listen socket failed - err: %d", errno);
         goto err;
     }
 
@@ -188,17 +234,16 @@ static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
 
     cfd = accept(lfd, (struct sockaddr*)&un, &len);
     if (cfd < 0) {
-        QMPH_LOG("listen socket failed - err: %d", errno);
+        QMPH_LOG("ERROR listen socket failed - err: %d", errno);
         goto err;
     }
 
     /* Done listening */
     close(lfd);
 
-    /* nodelay is non-blocking for the connection fd */
-    fcntl(cfd, F_SETFL, fcntl(cfd, F_GETFL) | O_NONBLOCK);
+    /* nodelay is non-blocking for the connection fd by default */
+    qmph_set_blocking_mode(cfd, 0);
 
-    pqhs->connected = 1;
     pqhs->unix_fd = cfd;
 
     return 0;
@@ -233,7 +278,7 @@ int main(int argc, char *argv[])
     qhs.stubdom_id = atoi(argv[1]);
 
     if (qhs.stubdom_id <= 0) {
-        QMPH_LOG("bad stubdom id (%d)", qhs.stubdom_id);
+        QMPH_LOG("ERROR bad stubdom id (%d)", qhs.stubdom_id);
         return -1;
     }
 
@@ -241,24 +286,24 @@ int main(int argc, char *argv[])
 
     ret = qmph_init_v4v_socket(&qhs);
     if (ret) {
-        QMPH_LOG("failed to init v4v socket - ret: %d\n", ret);
+        QMPH_LOG("ERROR failed to init v4v socket - ret: %d\n", ret);
         return -1;
     }
 
     QMPH_LOG("wait for hello from stubdom (%d)", qhs.stubdom_id);
 
     /* QMP heler must start first and wait for the hello */
-    ret = v4v_recvfrom(qhs.v4v_fd, qhs.recv_buf, sizeof(qhs.recv_buf),
+    ret = v4v_recvfrom(qhs.v4v_fd, qhs.msg_buf, sizeof(qhs.msg_buf),
                        0, &qhs.remote_addr);
     if (ret < 0) {
-        QMPH_LOG("v4v_recvfrom hello failed\n");
+        QMPH_LOG("ERROR v4v_recvfrom hello failed\n");
         qmph_exit_cleanup(ret);
     }
 
     if ((ret != sizeof(V4V_CHARDRV_HELLO) - 1) ||
-        (strncmp(V4V_CHARDRV_HELLO, (const char*)qhs.recv_buf,
+        (strncmp(V4V_CHARDRV_HELLO, (const char*)qhs.msg_buf,
                  sizeof(V4V_CHARDRV_HELLO)))) {
-        QMPH_LOG("v4v hello from stubdom failed - ret len: %d\n", ret);
+        QMPH_LOG("ERROR v4v hello from stubdom failed - ret len: %d\n", ret);
         qmph_exit_cleanup(ret);
     }
 
@@ -267,27 +312,31 @@ int main(int argc, char *argv[])
      */
     ret = qmph_init_unix_socket(&qhs);
     if (ret) {
-        QMPH_LOG("failed to init unix socket - ret: %d\n", ret);
+        QMPH_LOG("ERROR failed to init unix socket - ret: %d\n", ret);
         qmph_exit_cleanup(ret);
     }
 
-    FD_ZERO(&rfds);
-    FD_SET(qhs.v4v_fd, &rfds);
-    FD_SET(qhs.unix_fd, &rfds);
-    nfds = ((qhs.v4v_fd > qhs.unix_fd) ? qhs.v4v_fd : qhs.unix_fd) + 1;
-
     while (!pending_exit) {
+
+        FD_ZERO(&rfds);
+        FD_SET(qhs.v4v_fd, &rfds);
+        FD_SET(qhs.unix_fd, &rfds);
+        nfds = ((qhs.v4v_fd > qhs.unix_fd) ? qhs.v4v_fd : qhs.unix_fd) + 1;
 
         if (select(nfds, &rfds, NULL, NULL, NULL) == -1) {
             ret = errno;
-            QMPH_LOG("failure during select - err: %d\n", ret);
+            QMPH_LOG("ERROR failure during select - err: %d\n", ret);
             qmph_exit_cleanup(ret);
         }
 
-        if (FD_ISSET(qhs.v4v_fd, &rfds)) {
+        if (FD_ISSET(qhs.unix_fd, &rfds)) {
+            if (qmph_unix_to_v4v(&qhs))
+                break; /* abject misery */
         }
 
-        if (FD_ISSET(qhs.unix_fd, &rfds)) {
+        if (FD_ISSET(qhs.v4v_fd, &rfds)) {
+            if (qmph_v4v_to_unix(&qhs))
+                break; /* total death */
         }
     }
 
