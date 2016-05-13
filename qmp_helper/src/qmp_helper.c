@@ -37,13 +37,13 @@
 #include <syslog.h>
 #include <libv4v.h>
 
-static int pt_log_level = 0;
+static int qmph_log_level = 0;
 
 /**
- * PT_LOG: information to always log (errors & important low-volume events)
+ * QMPH_LOG: information to always log (errors & important low-volume events)
  * @param fmt,... printf style arguments
  */
-#define PT_LOG(fmt, ...)                                           \
+#define QMPH_LOG(fmt, ...)                                           \
 do {                                                               \
         syslog(LOG_NOTICE, "[%s:%s:%d] (stubdom-%d) " fmt,         \
                __FILE__, __FUNCTION__, __LINE__, qhs.stubdom_id,   \
@@ -51,13 +51,13 @@ do {                                                               \
     } while (0)
 
 /**
- * PT_DEBUG: debug level
+ * QMPH_DEBUG: debug level
  * @param fmt,... printf style arguments
  */
-#define PT_DEBUG(fmt, ...)                                             \
+#define QMPH_DEBUG(fmt, ...)                                             \
     do {                                                               \
-        if (pt_log_level >= 2)                                       \
-            PT_LOG(fmt, ## __VA_ARGS__);                                  \
+        if (qmph_log_level >= 2)                                       \
+            QMPH_LOG(fmt, ## __VA_ARGS__);                                  \
     } while (0)
 
 #define V4V_TYPE 'W'
@@ -84,7 +84,7 @@ static struct qmp_helper_state qhs;
 
 static int pending_exit = 0;
 
-static void exit_cleanup(int exit_code)
+static void qmph_exit_cleanup(int exit_code)
 {
     pending_exit = 1;
 
@@ -103,13 +103,13 @@ static void exit_cleanup(int exit_code)
     exit(exit_code);
 }
 
-static int init_helper_state(struct qmp_helper_state *pqhs)
+static int qmph_init_v4v_socket(struct qmp_helper_state *pqhs)
 {
     uint32_t v4v_ring_size = V4V_CHARDRV_RING_SIZE;
 
     pqhs->v4v_fd = v4v_socket(SOCK_DGRAM);
     if (pqhs->v4v_fd == -1) {
-        PT_LOG("unable to create a v4vsocket");
+        QMPH_LOG("unable to create a v4vsocket");
         return -1;
     }
 
@@ -123,21 +123,25 @@ static int init_helper_state(struct qmp_helper_state *pqhs)
     ioctl(pqhs->v4v_fd, V4VIOCSETRINGSIZE, &v4v_ring_size);
 
     if (v4v_bind(pqhs->v4v_fd, &pqhs->local_addr, pqhs->stubdom_id) == -1) {
-        PT_LOG("unable to bind the v4vsocket");
+        QMPH_LOG("unable to bind the v4vsocket");
         v4v_close(pqhs->v4v_fd);
         pqhs->v4v_fd = -1;
         return -1;
     }
 
-    /* TODO open the UNIX socket */
-
     return 0;
 }
 
-static void signal_handler(int sig)
+static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
 {
-    PT_LOG("handle signal %d", sig);
-    exit_cleanup(0);
+    /* TODO open the UNIX socket */
+    return 0;
+}
+
+static void qmph_signal_handler(int sig)
+{
+    QMPH_LOG("handle signal %d", sig);
+    qmph_exit_cleanup(0);
 }
 
 int main(int argc, char *argv[])
@@ -147,43 +151,44 @@ int main(int argc, char *argv[])
 
     openlog(NULL, LOG_NDELAY, LOG_DAEMON);
 
-    PT_LOG("starting %s\n", argv[0]);
+    QMPH_LOG("starting %s\n", argv[0]);
 
     memset(&qhs, 0, sizeof(qhs));
 
     if (argc != 2) {
-        PT_LOG("usage: %s <stubdom_id>", argv[0]);
+        QMPH_LOG("usage: %s <stubdom_id>", argv[0]);
         return -1;
     }
 
     qhs.stubdom_id = atoi(argv[1]);
 
     if (qhs.stubdom_id <= 0) {
-        PT_LOG("bad stubdom id (%d)", qhs.stubdom_id);
+        QMPH_LOG("bad stubdom id (%d)", qhs.stubdom_id);
         return -1;
     }
 
-    signal(SIGINT, signal_handler);
+    signal(SIGINT, qmph_signal_handler);
 
-    if (init_helper_state(&qhs) != 0) {
-        PT_LOG("failed to init helper!\n");
+    if (qmph_init_v4v_socket(&qhs) != 0) {
+        QMPH_LOG("failed to init v4v socket!\n");
         return -1;
     }
 
-    PT_DEBUG("wait for hello from stubdom (%d)", qhs.stubdom_id);
+    QMPH_LOG("wait for hello from stubdom (%d)", qhs.stubdom_id);
 
     /* QMP heler must start first and wait for the hello */
     ret = v4v_recvfrom(qhs.v4v_fd, qhs.recv_buf, sizeof(qhs.recv_buf),
                        0, &qhs.remote_addr);
     if (ret < 0) {
-        PT_LOG("v4v_recvfrom hello failed!\n");
-        exit_cleanup(ret);
+        QMPH_LOG("v4v_recvfrom hello failed\n");
+        qmph_exit_cleanup(ret);
     }
 
     if ((ret != sizeof(V4V_CHARDRV_HELLO) - 1) ||
         (strncmp(V4V_CHARDRV_HELLO, (const char*)qhs.recv_buf,
                  sizeof(V4V_CHARDRV_HELLO)))) {
-        /* TODO die here of move into loop and try again? */
+        QMPH_LOG("v4v hello from stubdom failed - ret len: %d\n", ret);
+        qmph_exit_cleanup(ret);
     }
 
     FD_ZERO(&rfds);
@@ -195,8 +200,8 @@ int main(int argc, char *argv[])
 
         if (select(nfds, &rfds, NULL, NULL, NULL) == -1) {
             ret = errno;
-            PT_LOG("failure during select - err: %d\n", ret);
-            exit_cleanup(ret);
+            QMPH_LOG("failure during select - err: %d\n", ret);
+            qmph_exit_cleanup(ret);
         }
 
         if (FD_ISSET(qhs.v4v_fd, &rfds)) {
@@ -206,7 +211,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    PT_LOG("exiting...\n");
-    exit_cleanup(0);
+    QMPH_LOG("exiting...\n");
+    qmph_exit_cleanup(0);
     return 0;
 }
