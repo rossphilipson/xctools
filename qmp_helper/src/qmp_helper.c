@@ -55,11 +55,11 @@ do {                                                                 \
 #define V4VIOCSETRINGSIZE       _IOW (V4V_TYPE,  1, uint32_t)
 
 #define V4V_QH_PORT 5100
+#define V4V_CHARDRV_PORT 15100
 #define V4V_CHARDRV_RING_SIZE \
   (V4V_ROUNDUP((((4096)*4) - sizeof(v4v_ring_t)-V4V_ROUNDUP(1))))
 
 #define V4V_CHARDRV_NAME  "[v4v-chardrv]"
-#define V4V_CHARDRV_HELLO "d2bb2546-155e-11e6-bf28-af0531854834"
 
 struct qmp_helper_state { 
     int stubdom_id;
@@ -151,9 +151,9 @@ static int qmph_init_v4v_socket(struct qmp_helper_state *pqhs)
     }
 
     pqhs->local_addr.port = V4V_QH_PORT;
-    pqhs->local_addr.domain = V4V_DOMID_ANY;
+    pqhs->local_addr.domain = 0;
 
-    pqhs->remote_addr.port = V4V_PORT_NONE;
+    pqhs->remote_addr.port = V4V_CHARDRV_PORT;
     pqhs->remote_addr.domain = pqhs->stubdom_id;
 
     if (ioctl(pqhs->v4v_fd, V4VIOCSETRINGSIZE, &v4v_ring_size) == -1) {
@@ -269,22 +269,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    QMPH_LOG("wait for hello from stubdom (%d)", qhs.stubdom_id);
-
-    /* QMP heler must start first and wait for the hello */
-    ret = v4v_recvfrom(qhs.v4v_fd, qhs.msg_buf, sizeof(qhs.msg_buf),
-                       0, &qhs.remote_addr);
-    if (ret < 0) {
-        QMPH_LOG("ERROR v4v_recvfrom hello failed\n");
-        qmph_exit_cleanup(ret);
-    }
-
-    if ((ret != sizeof(V4V_CHARDRV_HELLO) - 1) ||
-        (strncmp(V4V_CHARDRV_HELLO, (const char*)qhs.msg_buf,
-                 sizeof(V4V_CHARDRV_HELLO)))) {
-        QMPH_LOG("ERROR v4v hello from stubdom failed - ret len: %d\n", ret);
-        qmph_exit_cleanup(ret);
-    }
+    QMPH_LOG("v4v ready, wait for a connection...");
 
     /* Ready to listen and accept one connection. Note this will block on
      * accept until connected.
