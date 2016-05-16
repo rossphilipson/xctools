@@ -45,10 +45,10 @@
  * @param fmt,... printf style arguments
  */
 #define QMPH_LOG(fmt, ...)                                           \
-do {                                                               \
-        syslog(LOG_NOTICE, "[%s:%s:%d] (stubdom-%d) " fmt,         \
-               __FILE__, __FUNCTION__, __LINE__, qhs.stubdom_id,   \
-                 ##__VA_ARGS__);                                   \
+do {                                                                 \
+        syslog(LOG_NOTICE, "qmp-helper [%s:%s:%d] (stubdom-%d) " fmt,\
+               __FILE__, __FUNCTION__, __LINE__, qhs.stubdom_id,     \
+                 ##__VA_ARGS__);                                     \
     } while (0)
 
 #define V4V_TYPE 'W'
@@ -238,6 +238,8 @@ static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
         goto err;
     }
 
+    QMPH_LOG("Accepted 1 connection, closing listener");
+
     /* Done listening */
     close(lfd);
 
@@ -277,7 +279,7 @@ int main(int argc, char *argv[])
 
     qhs.stubdom_id = atoi(argv[1]);
 
-    if (qhs.stubdom_id <= 0) {
+    if (qhs.stubdom_id < 0) {
         QMPH_LOG("ERROR bad stubdom id (%d)", qhs.stubdom_id);
         return -1;
     }
