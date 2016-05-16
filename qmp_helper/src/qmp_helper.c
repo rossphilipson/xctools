@@ -92,18 +92,6 @@ static void qmph_exit_cleanup(int exit_code)
     exit(exit_code);
 }
 
-static void qmph_set_blocking_mode(int fd, int blocking)
-{
-    int f;
-
-    f = fcntl(fd, F_GETFL);
-
-    if (blocking)
-        fcntl(fd, F_SETFL, f & ~O_NONBLOCK);
-    else
-        fcntl(fd, F_SETFL, f | O_NONBLOCK);
-}
-
 static int qmph_unix_to_v4v(struct qmp_helper_state *pqhs)
 {
     int ret, rcv;
@@ -119,8 +107,6 @@ static int qmph_unix_to_v4v(struct qmp_helper_state *pqhs)
         qmph_exit_cleanup(0);
     }
 
-    qmph_set_blocking_mode(pqhs->v4v_fd, 1);
-
     ret = v4v_sendto(pqhs->v4v_fd, pqhs->msg_buf,
                      rcv, 0, &pqhs->remote_addr);
     if (ret != rcv) {
@@ -128,8 +114,6 @@ static int qmph_unix_to_v4v(struct qmp_helper_state *pqhs)
                  strerror(errno), ret, rcv);
         return -1;
     }
-
-    qmph_set_blocking_mode(pqhs->v4v_fd, 0);
 
     return 0;
 }
@@ -146,16 +130,12 @@ static int qmph_v4v_to_unix(struct qmp_helper_state *pqhs)
         return rcv;
     }
 
-    qmph_set_blocking_mode(pqhs->unix_fd, 1);
-
     ret = write(pqhs->unix_fd, pqhs->msg_buf, rcv);
     if (ret < 0) {
         QMPH_LOG("ERROR write(unix_fd) failed (%s) - %d.\n",
                  strerror(errno), ret);
         return ret;
     }
-
-    qmph_set_blocking_mode(pqhs->unix_fd, 0);
 
     return 0;
 }
@@ -238,13 +218,10 @@ static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
         goto err;
     }
 
-    QMPH_LOG("Accepted 1 connection, closing listener");
+    QMPH_LOG("Accepted the connection cfd: %d", cfd);
 
     /* Done listening */
     close(lfd);
-
-    /* nodelay is non-blocking for the connection fd by default */
-    qmph_set_blocking_mode(cfd, 0);
 
     pqhs->unix_fd = cfd;
 
